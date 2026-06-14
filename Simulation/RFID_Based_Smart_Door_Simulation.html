@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RFID Smart Door System — Simulator</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #22263a;
+    --border: #2e3350;
+    --border2: #3d4270;
+    --text: #e8eaf0;
+    --text2: #8b90a8;
+    --text3: #555a7a;
+    --green: #22c55e;
+    --green-bg: #0d2b1a;
+    --green-dim: #16532e;
+    --red: #ef4444;
+    --red-bg: #2b0d0d;
+    --amber: #f59e0b;
+    --amber-bg: #2b1f00;
+    --blue: #3b82f6;
+    --blue-bg: #0d1b2b;
+    --purple: #a78bfa;
+    --purple-bg: #1e1433;
+    --teal: #2dd4bf;
+    --lcd-bg: #0a1a0a;
+    --lcd-text: #4ade80;
+    --lcd-dim: #1a3a1a;
+    --wall: #5c4a3a;
+    --wall-light: #7a6250;
+    --door-wood: #c8a06a;
+    --door-dark: #8b5e2a;
+    --floor: #2a2520;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    grid-template-rows: 44px 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  .topbar {
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+  }
+  .topbar-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.01em;
+  }
+  .topbar-sub {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: 'Consolas', monospace;
+  }
+  .badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-left: auto;
+  }
+  .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-dim); }
+  .badge-red   { background: var(--red-bg);   color: var(--red);   border: 1px solid #5a1a1a; }
+
+  .main-scene {
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  canvas#scene {
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  .sidebar {
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sb-section {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+  .sb-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+
+  .lcd-screen {
+    background: var(--lcd-bg);
+    border: 2px solid #1a3a1a;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--lcd-text);
+  }
+  .lcd-screen .lcd-row {
+    display: block;
+    white-space: pre;
+    letter-spacing: 0.05em;
+  }
+  .lcd-cursor { animation: blink 1s step-end infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  .status-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 3px 0;
+  }
+  .status-key { color: var(--text2); }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+  .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .p-off   { background: #1a1d27; color: var(--text3); border: 1px solid var(--border); }
+  .p-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-dim); }
+  .p-amber { background: var(--amber-bg); color: var(--amber); border: 1px solid #5a3a00; }
+  .p-red   { background: var(--red-bg);   color: var(--red);   border: 1px solid #5a1a1a; }
+  .p-blue  { background: var(--blue-bg);  color: var(--blue);  border: 1px solid #1a3a6a; }
+
+  .rfid-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rfid-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    background: var(--bg3);
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .rfid-card:hover { border-color: var(--border2); background: #2a2e45; }
+  .rfid-card:active { transform: scale(0.98); }
+  .rfid-card.scanning { background: #0d1b3a; border-color: var(--blue); animation: scan-pulse 0.5s ease-in-out; }
+  .rfid-card.deny-flash { background: var(--red-bg); border-color: var(--red); }
+  @keyframes scan-pulse { 0%{opacity:1}30%{opacity:0.4}100%{opacity:1} }
+  .rfid-name { font-size: 12px; color: var(--text); font-weight: 500; }
+  .rfid-uid  { font-size: 10px; color: var(--text3); font-family: 'Consolas', monospace; }
+
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sim-btn {
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text);
+    transition: background 0.12s, border-color 0.12s, transform 0.1s;
+    user-select: none;
+    font-family: inherit;
+  }
+  .sim-btn:hover { background: #2a2e45; border-color: #5060a0; }
+  .sim-btn:active { transform: scale(0.96); }
+  .sim-btn.active-green { background: var(--green-bg); border-color: var(--green-dim); color: var(--green); }
+  .sim-btn.active-amber { background: var(--amber-bg); border-color: #5a3a00; color: var(--amber); }
+
+  .log-box {
+    background: var(--bg);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    height: 130px;
+    overflow-y: auto;
+    padding: 6px 8px;
+  }
+  .log-box::-webkit-scrollbar { width: 4px; }
+  .log-box::-webkit-scrollbar-track { background: var(--bg2); }
+  .log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .log-entry { padding: 1px 0; line-height: 1.6; }
+  .log-ts { color: var(--text3); }
+  .log-ok   { color: var(--green); }
+  .log-err  { color: var(--red); }
+  .log-info { color: var(--blue); }
+  .log-warn { color: var(--amber); }
+  .log-def  { color: var(--text2); }
+
+  .pwm-bar-wrap { margin-top: 6px; }
+  .pwm-bar-label { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
+  .pwm-track { background: var(--bg3); border-radius: 3px; height: 6px; border: 1px solid var(--border); overflow: hidden; }
+  .pwm-fill  { height: 100%; border-radius: 3px; transition: width 0.1s; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <rect x="2" y="5" width="18" height="14" rx="2" stroke="#3b82f6" stroke-width="1.5"/>
+      <path d="M8 5V3.5A2.5 2.5 0 0 1 13.5 3.5V5" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="11" cy="12" r="2.5" stroke="#22c55e" stroke-width="1.2"/>
+    </svg>
+    <span class="topbar-title">RFID Smart Door System</span>
+    <span class="topbar-sub">ESP32 · MFRC522 · BTS7960 · JQ6500 · I2C LCD</span>
+    <span class="badge badge-green" id="sys-badge">INACTIVE</span>
+  </div>
+
+  <!-- Canvas scene -->
+  <div class="main-scene">
+    <canvas id="scene"></canvas>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sb-section">
+      <div class="sb-label">LCD Display</div>
+      <div class="lcd-screen">
+        <span class="lcd-row" id="lcd0">System: INACTV  </span>
+        <span class="lcd-row" id="lcd1">Scan RFID Card  </span>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">System Status</div>
+      <div class="status-grid">
+        <div class="status-row"><span class="status-key">System</span><span class="pill p-off" id="st-sys"><span class="pill-dot"></span>Inactive</span></div>
+        <div class="status-row"><span class="status-key">Solenoid lock</span><span class="pill p-off" id="st-lock"><span class="pill-dot"></span>Locked</span></div>
+        <div class="status-row"><span class="status-key">Door position</span><span class="pill p-off" id="st-door"><span class="pill-dot"></span>Closed</span></div>
+        <div class="status-row"><span class="status-key">PIR sensor</span><span class="pill p-off" id="st-pir"><span class="pill-dot"></span>No motion</span></div>
+        <div class="status-row"><span class="status-key">Push button</span><span class="pill p-off" id="st-btn"><span class="pill-dot"></span>Released</span></div>
+        <div class="status-row"><span class="status-key">Motor driver</span><span class="pill p-off" id="st-motor"><span class="pill-dot"></span>Stopped</span></div>
+      </div>
+      <div class="pwm-bar-wrap">
+        <div class="pwm-bar-label">Motor PWM: <span id="pwm-val">0</span>/255</div>
+        <div class="pwm-track"><div class="pwm-fill" id="pwm-fill" style="width:0%;background:var(--green)"></div></div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">RFID Cards — click to scan</div>
+      <div class="rfid-list" id="card-list"></div>
+      <div style="margin-top:4px">
+        <div class="rfid-card" id="card-unauth" onclick="scanCard('UNAUTH')">
+          <span class="rfid-name">Unknown card</span>
+          <span class="rfid-uid">FF:FF:FF:FF</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Inputs</div>
+      <div class="btn-row">
+        <button class="sim-btn" id="pir-btn" onclick="togglePIR()">&#11044; PIR Trigger</button>
+        <button class="sim-btn" id="push-btn" onmousedown="pressBtn(true)" onmouseup="pressBtn(false)" onmouseleave="pressBtn(false)" ontouchstart="pressBtn(true)" ontouchend="pressBtn(false)">&#9654; Push Button</button>
+      </div>
+    </div>
+
+    <div class="sb-section" style="flex:1">
+      <div class="sb-label">Serial Monitor (115200 baud)</div>
+      <div class="log-box" id="log-box"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const CARDS = [
+  {name:'Card 1', uid:'44:34:DD:00'},
+  {name:'Card 2', uid:'EF:76:26:1E'},
+  {name:'Card 3', uid:'68:00:0A:78'},
+  {name:'Card 4', uid:'D5:0B:AA:72'},
+  {name:'Card 5', uid:'E8:29:85:77'},
+  {name:'Card 6', uid:'B3:50:F6:13'},
+];
+
+const S = {
+  active: false,
+  locked: false,
+  doorPct: 0,
+  doorOpen: false,
+  pir: false,
+  btn: false,
+  motorDir: 0,
+  pwm: 0,
+  scanning: false,
+};
+
+let pirTimer = null;
+let doorInterval = null;
+let startTime = Date.now();
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const container = canvas.parentElement;
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  canvas.width = w;
+  canvas.height = h;
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+
+CARDS.forEach((c, i) => {
+  const el = document.createElement('div');
+  el.className = 'rfid-card';
+  el.id = 'card-' + i;
+  el.innerHTML = `<span class="rfid-name">${c.name}</span><span class="rfid-uid">${c.uid}</span>`;
+  el.onclick = () => scanCard(i);
+  document.getElementById('card-list').appendChild(el);
+});
+
+function ts() {
+  const e = Math.floor((Date.now() - startTime) / 1000);
+  const m = String(Math.floor(e / 60)).padStart(2, '0');
+  const s = String(e % 60).padStart(2, '0');
+  return `[${m}:${s}]`;
+}
+
+function log(msg, type) {
+  const box = document.getElementById('log-box');
+  const row = document.createElement('div');
+  row.className = 'log-entry';
+  const clsMap = {ok:'log-ok', err:'log-err', info:'log-info', warn:'log-warn'};
+  const cls = clsMap[type] || 'log-def';
+  row.innerHTML = `<span class="log-ts">${ts()} </span><span class="${cls}">${msg}</span>`;
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setLCD(r0, r1) {
+  document.getElementById('lcd0').textContent = r0.padEnd(16).slice(0, 16);
+  if (r1 !== undefined) document.getElementById('lcd1').textContent = r1.padEnd(16).slice(0, 16);
+}
+
+function pill(id, text, cls) {
+  const el = document.getElementById(id);
+  el.className = 'pill ' + cls;
+  el.innerHTML = `<span class="pill-dot"></span>${text}`;
+}
+
+function updateUI() {
+  const b = document.getElementById('sys-badge');
+  b.textContent = S.active ? 'ACTIVE' : 'INACTIVE';
+  b.className = 'badge ' + (S.active ? 'badge-green' : 'badge-red');
+  pill('st-sys',   S.active ? 'Active' : 'Inactive',       S.active ? 'p-green' : 'p-off');
+  pill('st-lock',  S.locked ? 'Unlocked' : 'Locked',       S.locked ? 'p-amber' : 'p-off');
+  const dpct = Math.round(S.doorPct);
+  const doorTxt = S.doorOpen ? 'Open' : (S.doorPct > 0 ? `Moving ${dpct}%` : 'Closed');
+  const doorCls = S.doorOpen ? 'p-green' : (S.doorPct > 0 ? 'p-amber' : 'p-off');
+  pill('st-door', doorTxt, doorCls);
+  pill('st-pir',   S.pir ? 'Motion!' : 'No motion',        S.pir ? 'p-amber' : 'p-off');
+  pill('st-btn',   S.btn ? 'Pressed' : 'Released',         S.btn ? 'p-amber' : 'p-off');
+  const mTxt = S.motorDir === 1 ? 'Opening' : S.motorDir === -1 ? 'Closing' : 'Stopped';
+  const mCls = S.motorDir !== 0 ? 'p-green' : 'p-off';
+  pill('st-motor', mTxt, mCls);
+  document.getElementById('pwm-val').textContent = S.pwm;
+  const fill = document.getElementById('pwm-fill');
+  fill.style.width = Math.round((S.pwm / 255) * 100) + '%';
+  fill.style.background = S.motorDir === 1 ? '#22c55e' : S.motorDir === -1 ? '#f59e0b' : '#22c55e';
+  draw();
+}
+
+function mainLCD() {
+  setLCD(S.active ? 'System: ACTIVE  ' : 'System: INACTV  ', 'Scan RFID Card  ');
+}
+
+function scanCard(idx) {
+  if (S.scanning) return;
+  S.scanning = true;
+  const isAuth = idx !== 'UNAUTH';
+  const el = document.getElementById(isAuth ? 'card-' + idx : 'card-unauth');
+  el.classList.add('scanning');
+  const uid = isAuth ? CARDS[idx].uid : 'FF:FF:FF:FF';
+  log(`RFID scan → UID ${uid}`, 'info');
+
+  setTimeout(() => {
+    el.classList.remove('scanning');
+    S.scanning = false;
+    if (!isAuth) {
+      el.classList.add('deny-flash');
+      setTimeout(() => el.classList.remove('deny-flash'), 600);
+      log('Access DENIED — card not authorised', 'err');
+      setLCD('Access Denied!  ', '                ');
+      setTimeout(() => mainLCD(), 2200);
+      return;
+    }
+    S.active = !S.active;
+    if (S.active) {
+      S.locked = true;
+      log('System ACTIVATED', 'ok');
+      log('[LOCK] Solenoid engaged (GPIO4=HIGH)', 'ok');
+      log('[AUDIO] Track 1 → "Welcome"', 'info');
+      setLCD('System Activated', '   Welcome!     ');
+      setTimeout(() => mainLCD(), 3000);
+    } else {
+      S.locked = false;
+      stopDoor();
+      log('System DEACTIVATED', 'warn');
+      log('[LOCK] Solenoid released (GPIO4=LOW)', 'warn');
+      log('[AUDIO] Track 2 → "Goodbye"', 'info');
+      setLCD('    System      ', ' Deactivated    ');
+      setTimeout(() => mainLCD(), 3000);
+    }
+    updateUI();
+  }, 700);
+}
+
+function togglePIR() {
+  if (!S.active) { log('PIR ignored — system inactive', 'warn'); return; }
+  S.pir = !S.pir;
+  const btn = document.getElementById('pir-btn');
+  btn.className = 'sim-btn' + (S.pir ? ' active-amber' : '');
+  log(S.pir ? '[PIR] Motion detected → GPIO13 LOW' : '[PIR] Motion cleared → GPIO13 HIGH', S.pir ? 'warn' : 'info');
+  updateUI();
+  evalInputs();
+  if (S.pir) {
+    if (pirTimer) clearTimeout(pirTimer);
+    pirTimer = setTimeout(() => {
+      S.pir = false;
+      document.getElementById('pir-btn').className = 'sim-btn';
+      log('[PIR] Auto-clear after 5s', 'info');
+      updateUI();
+      evalInputs();
+    }, 5000);
+  }
+}
+
+function pressBtn(down) {
+  if (!S.active && down) { log('Button ignored — system inactive', 'warn'); return; }
+  if (S.btn === down) return;
+  S.btn = down;
+  const btn = document.getElementById('push-btn');
+  btn.className = 'sim-btn' + (down ? ' active-green' : '');
+  log(down ? '[BTN] Push button pressed → GPIO12 LOW' : '[BTN] Button released → GPIO12 HIGH', down ? 'warn' : 'info');
+  updateUI();
+  evalInputs();
+}
+
+function evalInputs() {
+  if (!S.active) { stopDoor(); return; }
+  if (!S.doorOpen && (S.pir || S.btn)) openDoor();
+  else if (S.doorOpen && !S.pir && !S.btn) closeDoor();
+}
+
+function openDoor() {
+  if (S.motorDir === 1) return;
+  S.motorDir = 1; S.pwm = 255;
+  log('[DOOR] Opening → R_EN/L_EN HIGH, RPWM=255', 'ok');
+  log('[AUDIO] Track 3 → "Door opening"', 'info');
+  setLCD('  Door Opening  ', '  Please Wait   ');
+  animDoor(1);
+}
+
+function closeDoor() {
+  if (S.motorDir === -1) return;
+  S.motorDir = -1; S.pwm = 255;
+  log('[DOOR] Closing → R_EN/L_EN HIGH, LPWM=255', 'warn');
+  log('[AUDIO] Track 4 → "Door closing"', 'info');
+  setLCD('  Door Closing  ', '  Please Wait   ');
+  animDoor(-1);
+}
+
+function stopDoor() {
+  if (doorInterval) { clearInterval(doorInterval); doorInterval = null; }
+  S.motorDir = 0; S.pwm = 0;
+  S.pir = false; S.btn = false;
+  S.doorOpen = false;
+  document.getElementById('pir-btn').className = 'sim-btn';
+  document.getElementById('push-btn').className = 'sim-btn';
+}
+
+function animDoor(dir) {
+  if (doorInterval) { clearInterval(doorInterval); doorInterval = null; }
+  let elapsed = 0;
+  doorInterval = setInterval(() => {
+    if (!S.active) { stopDoor(); updateUI(); return; }
+    elapsed += 40;
+    S.pwm = elapsed < 3000 ? 255 : 180;
+    S.doorPct += dir * 2.2;
+    S.doorPct = Math.max(0, Math.min(100, S.doorPct));
+    if (dir === 1 && S.doorPct >= 100) {
+      clearInterval(doorInterval); doorInterval = null;
+      S.doorOpen = true; S.motorDir = 0; S.pwm = 0;
+      log('[DOOR] Open limit switch triggered → GPIO14 LOW', 'ok');
+      log('[DOOR] Motor stopped', 'ok');
+      setLCD('   Door Open    ', '                ');
+    }
+    if (dir === -1 && S.doorPct <= 0) {
+      clearInterval(doorInterval); doorInterval = null;
+      S.doorOpen = false; S.motorDir = 0; S.pwm = 0;
+      log('[DOOR] Close limit switch triggered → GPIO15 LOW', 'ok');
+      log('[DOOR] Motor stopped', 'ok');
+      mainLCD();
+    }
+    updateUI();
+  }, 40);
+}
+
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  if (!W || !H) return;
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.fillStyle = '#0f1117';
+  ctx.fillRect(0, 0, W, H);
+
+  const cx = W / 2;
+  const sceneW = Math.min(W - 20, 560);
+  const sceneH = Math.min(H - 20, 440);
+  const sx = cx - sceneW / 2;
+  const sy = (H - sceneH) / 2;
+
+  const roomW = Math.round(sceneW * 0.72);
+  const roomH = Math.round(sceneH * 0.7);
+  const roomX = sx + Math.round(sceneW * 0.04);
+  const roomY = sy + Math.round(sceneH * 0.05);
+
+  ctx.fillStyle = '#1a1610';
+  ctx.fillRect(roomX - 2, roomY - 2, roomW + 4, roomH + 4);
+
+  ctx.fillStyle = '#18160e';
+  ctx.fillRect(roomX, roomY + roomH - 12, roomW, 12);
+
+  const wallThick = Math.round(roomW * 0.10);
+  const doorW = Math.round(roomW * 0.38);
+  const doorH = Math.round(roomH * 0.72);
+  const doorX = roomX + wallThick + Math.round((roomW - 2 * wallThick - doorW) * 0.3);
+  const doorY = roomY + roomH - 12 - doorH;
+
+  ctx.fillStyle = '#3d3020';
+  ctx.fillRect(roomX, roomY, roomW, roomH - 12);
+
+  ctx.fillStyle = '#4a3a28';
+  ctx.fillRect(roomX, roomY, wallThick, roomH - 12);
+  ctx.fillRect(doorX + doorW, roomY, roomW - (doorX + doorW - roomX), roomH - 12);
+  ctx.fillRect(roomX, roomY, roomW, doorY - roomY);
+
+  ctx.fillStyle = '#5c4830';
+  ctx.strokeStyle = '#7a6040';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    const bx = roomX + 2;
+    const by = roomY + 4 + i * Math.round((doorY - roomY - 12) / 3);
+    const bh = Math.round((doorY - roomY - 18) / 3);
+    ctx.fillRect(bx, by, wallThick - 4, bh);
+    ctx.strokeRect(bx, by, wallThick - 4, bh);
+  }
+
+  const openFrac = S.doorPct / 100;
+  const actualDoorW = Math.max(10, Math.round(doorW * (1 - openFrac * 0.93)));
+
+  if (openFrac > 0.04) {
+    const openX = doorX + actualDoorW;
+    const openW = doorW - actualDoorW;
+    ctx.fillStyle = 'rgba(20, 50, 80, 0.5)';
+    ctx.fillRect(openX, doorY, openW, doorH);
+    ctx.strokeStyle = 'rgba(60, 130, 200, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(openX, doorY, openW, doorH);
+    if (openW > 20) {
+      ctx.fillStyle = 'rgba(100, 160, 220, 0.5)';
+      ctx.font = `bold ${Math.round(openW * 0.28)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('OPEN', openX + openW / 2, doorY + doorH / 2);
+    }
+  }
+
+  const grad = ctx.createLinearGradient(doorX, 0, doorX + actualDoorW, 0);
+  grad.addColorStop(0, '#b8904a');
+  grad.addColorStop(0.4, '#d4a85e');
+  grad.addColorStop(0.7, '#c89848');
+  grad.addColorStop(1, '#a07838');
+  ctx.fillStyle = grad;
+  ctx.fillRect(doorX, doorY, actualDoorW, doorH);
+
+  ctx.strokeStyle = '#8a6030';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(doorX, doorY, actualDoorW, doorH);
+
+  if (actualDoorW > 16) {
+    ctx.strokeStyle = '#8a6030';
+    ctx.lineWidth = 1;
+    const pw = actualDoorW - 12, ph = doorH - 20, px = doorX + 6, py = doorY + 10;
+    const mid = doorH * 0.5;
+    ctx.strokeRect(px, py, pw, mid - 14);
+    ctx.strokeRect(px, doorY + mid, pw, doorH - mid - 10);
+  }
+
+  if (actualDoorW > 14) {
+    const knobX = doorX + actualDoorW - 10;
+    const knobY = doorY + Math.round(doorH * 0.52);
+    if (S.locked) {
+      ctx.fillStyle = '#f59e0b';
+      ctx.strokeStyle = '#d97706';
+    } else {
+      ctx.fillStyle = '#22c55e';
+      ctx.strokeStyle = '#16a34a';
+    }
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(knobX, knobY, 5, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(knobX, knobY, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#666050';
+  ctx.fillRect(roomX, roomY, roomW, 4);
+  ctx.fillRect(roomX + wallThick - 2, doorY, 2, doorH);
+  ctx.fillRect(doorX + doorW + 2, doorY, 2, doorH);
+
+  const FONT_BASE = Math.max(10, Math.round(Math.min(W, H) * 0.026));
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+  ctx.fillStyle = '#8b90a8';
+  ctx.font = `${FONT_BASE - 2}px 'Segoe UI', sans-serif`;
+  ctx.fillText('Door Assembly', roomX, roomY - 8);
+
+  if (S.motorDir !== 0 || S.doorPct > 0) {
+    const pct = Math.round(S.doorPct);
+    const dir = S.motorDir === 1 ? 'Opening' : S.motorDir === -1 ? 'Closing' : (S.doorOpen ? 'Open' : 'Stopped');
+    const col = S.motorDir === 1 ? '#22c55e' : S.motorDir === -1 ? '#f59e0b' : '#8b90a8';
+    ctx.fillStyle = col;
+    ctx.font = `bold ${FONT_BASE}px 'Consolas', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${dir} — ${pct}%`, roomX + roomW / 2, roomY + roomH + 20);
+
+    const bw = Math.round(roomW * 0.7), bx = roomX + roomW / 2 - bw / 2, by = roomY + roomH + 26;
+    ctx.fillStyle = '#22263a';
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, 7, 3); ctx.fill();
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.roundRect(bx, by, Math.round(bw * pct / 100), 7, 3); ctx.fill();
+    ctx.textAlign = 'left';
+  }
+
+  const compY = sy + Math.round(sceneH * 0.82);
+  const compW = Math.round(sceneW * 0.18);
+  const compH = Math.round(sceneH * 0.15);
+  const gap = Math.round(sceneW * 0.04);
+  const comps = [
+    { label: 'MFRC522', sub: 'SPI · 3.3V', active: false, col: '#3b82f6' },
+    { label: 'BTS7960', sub: S.motorDir !== 0 ? (S.motorDir === 1 ? '→ OPEN' : '← CLOSE') : 'STANDBY', active: S.motorDir !== 0, col: '#22c55e' },
+    { label: 'PIR HC-SR501', sub: S.pir ? 'MOTION!' : 'Quiet', active: S.pir, col: '#f59e0b' },
+    { label: 'Solenoid', sub: S.locked ? 'ENGAGED' : 'RELEASED', active: S.locked, col: '#f59e0b' },
+    { label: 'JQ6500', sub: 'Audio · UART', active: false, col: '#a78bfa' },
+  ];
+
+  const totalW = comps.length * compW + (comps.length - 1) * gap;
+  let cx0 = cx - totalW / 2;
+
+  comps.forEach(c => {
+    const bx = cx0, by = compY;
+    const bCol = c.active ? c.col : '#2e3350';
+    ctx.fillStyle = c.active ? hexWithAlpha(c.col, 0.12) : '#1a1d27';
+    ctx.strokeStyle = bCol;
+    ctx.lineWidth = c.active ? 1.5 : 1;
+    ctx.beginPath(); ctx.roundRect(bx, by, compW, compH, 5); ctx.fill(); ctx.stroke();
+
+    const fl = Math.round(Math.min(compW, compH) * 0.28);
+    ctx.fillStyle = bCol;
+    ctx.font = `bold ${fl}px 'Segoe UI', sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const lbl = c.label.length > 10 ? c.label.slice(0, 9) + '…' : c.label;
+    ctx.fillText(lbl, bx + compW / 2, by + compH * 0.38);
+
+    const fs = Math.round(fl * 0.78);
+    ctx.fillStyle = c.active ? c.col : '#555a7a';
+    ctx.font = `${fs}px 'Consolas', monospace`;
+    ctx.fillText(c.sub, bx + compW / 2, by + compH * 0.72);
+
+    if (c.active) {
+      ctx.fillStyle = c.col;
+      ctx.beginPath(); ctx.arc(bx + compW - 7, by + 7, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    cx0 += compW + gap;
+  });
+
+  const espX = sx + sceneW - Math.round(sceneW * 0.22);
+  const espY = sy + Math.round(sceneH * 0.08);
+  const espW = Math.round(sceneW * 0.20);
+  const espH = Math.round(sceneH * 0.68);
+  ctx.fillStyle = '#0d1235';
+  ctx.strokeStyle = S.active ? '#3b82f6' : '#2e3350';
+  ctx.lineWidth = S.active ? 1.5 : 1;
+  ctx.beginPath(); ctx.roundRect(espX, espY, espW, espH, 6); ctx.fill(); ctx.stroke();
+
+  const ef = Math.round(espW * 0.16);
+  ctx.fillStyle = '#3b82f6';
+  ctx.font = `bold ${ef}px 'Segoe UI', sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('ESP32', espX + espW / 2, espY + 14);
+
+  const pf = Math.max(8, Math.round(espW * 0.12));
+  const gpios = [
+    {l:'GPIO5  SS',    active:false,    col:'#3b82f6'},
+    {l:'GPIO18 SCK',   active:false,    col:'#3b82f6'},
+    {l:'GPIO23 MOSI',  active:false,    col:'#3b82f6'},
+    {l:'GPIO19 MISO',  active:false,    col:'#3b82f6'},
+    {l:'GPIO27 RST',   active:false,    col:'#3b82f6'},
+    {l:'GPIO21 SDA',   active:false,    col:'#a78bfa'},
+    {l:'GPIO22 SCL',   active:false,    col:'#a78bfa'},
+    {l:'GPIO13 PIR',   active:S.pir,    col:'#f59e0b'},
+    {l:'GPIO12 BTN',   active:S.btn,    col:'#f59e0b'},
+    {l:'GPIO25 RPWM',  active:S.motorDir===1,  col:'#22c55e'},
+    {l:'GPIO26 LPWM',  active:S.motorDir===-1, col:'#22c55e'},
+    {l:'GPIO32 R_EN',  active:S.motorDir!==0,  col:'#22c55e'},
+    {l:'GPIO33 L_EN',  active:S.motorDir!==0,  col:'#22c55e'},
+    {l:'GPIO4  RLY',   active:S.locked, col:'#f59e0b'},
+    {l:'GPIO14 OLIM',  active:S.doorOpen && S.doorPct>=99,   col:'#22c55e'},
+    {l:'GPIO15 CLIM',  active:!S.doorOpen && S.doorPct<=1 && !S.motorDir, col:'#22c55e'},
+  ];
+  const rowH2 = (espH - 30) / gpios.length;
+  gpios.forEach((g, i) => {
+    const gx = espX + 6;
+    const gy = espY + 26 + i * rowH2 + rowH2 / 2;
+    ctx.fillStyle = g.active ? g.col : '#2e3a6a';
+    ctx.beginPath(); ctx.arc(gx, gy, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = g.active ? g.col : '#3d4270';
+    ctx.font = `${pf}px 'Consolas', monospace`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(g.l, gx + 7, gy);
+  });
+
+  ctx.fillStyle = '#555a7a';
+  ctx.font = `${FONT_BASE - 2}px 'Segoe UI', sans-serif`;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('ESP32 GPIO', espX, espY - 8);
+
+  if (!S.active && S.doorPct === 0) {
+    ctx.fillStyle = '#555a7a';
+    ctx.font = `${FONT_BASE - 1}px 'Segoe UI', sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('Click an authorised RFID card to activate the system', cx, roomY + roomH + 46);
+  }
+}
+
+function hexWithAlpha(hex, a) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+log('[BOOT] ESP32 starting…', 'info');
+log('[BOOT] EEPROM read → systemActive=false', 'ok');
+log('[SPI]  MFRC522 init OK', 'ok');
+log('[I2C]  LCD 0x27 init OK', 'ok');
+log('[UART] JQ6500 init OK · vol=25', 'ok');
+log('[PWM]  Ch0,1 @ 1kHz 8-bit', 'ok');
+setTimeout(() => {
+  log('[WIFI] Connecting to SSID…', 'info');
+  setTimeout(() => {
+    log('[WIFI] Connected · IP 192.168.1.42', 'ok');
+    log('[OTA]  ArduinoOTA ready on smart-door-esp32', 'ok');
+    log('[BOOT] System ready. Scan RFID.', 'ok');
+  }, 1400);
+}, 400);
+
+setTimeout(() => {
+  resizeCanvas();
+}, 100);
+</script>
+</body>
+</html>

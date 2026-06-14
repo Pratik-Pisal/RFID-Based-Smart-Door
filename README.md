@@ -82,6 +82,9 @@ RFID-Based-Smart-Door/
 │   ├── Project_Report.pdf
 │   └── User_Manual.pdf
 │
+├── Simulation/
+│   └── RFID_Based_Smart_Door_Simulator.html
+│
 ├── Images/
 │
 └── README.md

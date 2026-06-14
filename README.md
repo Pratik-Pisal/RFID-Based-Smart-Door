@@ -71,6 +71,10 @@ This project demonstrates the application of embedded systems, automation, motor
 ```text
 RFID-Based-Smart-Door/
 │
+├── Documentation/
+│   ├── Project_Report.pdf
+│   └── User_Manual.pdf
+│
 ├── Firmware/
 │   └── ESP32_Smart_Door.ino
 │
@@ -78,14 +82,17 @@ RFID-Based-Smart-Door/
 │   ├── Circuit_Diagram.pdf
 │   └── Wiring_Diagram.png
 │
-├── Documentation/
-│   ├── Project_Report.pdf
-│   └── User_Manual.pdf
+├── Images/
+│   ├── System_Overview.png
+│   ├── Hardware_Photo.jpg
+│   └── UI_Screenshots/
 │
 ├── Simulation/
-│   └── RFID_Based_Smart_Door_Simulator.html
+│   └── RFID_Smart_Door_Simulator.html
 │
-├── Images/
+├── Videos/
+│   ├── Project_Demo.mp4
+│   └── Door_Operation.mp4
 │
 └── README.md
 ```

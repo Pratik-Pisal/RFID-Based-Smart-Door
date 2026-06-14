@@ -1,0 +1,454 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--color-background-primary);color:var(--color-text-primary)}
+.sim{display:grid;grid-template-columns:1fr 260px;gap:12px;padding:12px}
+.scene{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px;position:relative;min-height:480px}
+.panel{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 12px}
+.card-title{font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.lcd{background:#1a2a1a;border-radius:6px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;line-height:1.8;color:#7ec850;border:2px solid #2a3a2a;min-height:48px}
+.lcd span{display:block;white-space:pre;letter-spacing:.05em}
+.log{background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary);height:110px;overflow-y:auto;padding:6px 8px}
+.log-entry{padding:1px 0;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary)}
+.log-entry.ok{color:var(--color-text-success)}
+.log-entry.err{color:var(--color-text-danger)}
+.log-entry.info{color:var(--color-text-info)}
+.log-entry.warn{color:var(--color-text-warning)}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap}
+button{cursor:pointer;border-radius:var(--border-radius-md);font-size:12px;font-weight:500;padding:6px 12px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-primary);transition:background .15s}
+button:hover{background:var(--color-background-secondary)}
+button:active{transform:scale(.97)}
+button.active{background:var(--color-background-success);border-color:var(--color-border-success);color:var(--color-text-success)}
+button.danger{background:var(--color-background-danger);border-color:var(--color-border-danger);color:var(--color-text-danger)}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500}
+.pill.on{background:var(--color-background-success);color:var(--color-text-success)}
+.pill.off{background:var(--color-background-secondary);color:var(--color-text-secondary)}
+.pill.warn{background:var(--color-background-warning);color:var(--color-text-warning)}
+.pill.err{background:var(--color-background-danger);color:var(--color-text-danger)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.status-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.status-row:last-child{border-bottom:none}
+.stat-label{color:var(--color-text-secondary)}
+.rfid-cards{display:flex;flex-direction:column;gap:4px}
+.rfid-card{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);cursor:pointer;font-size:12px;transition:background .12s}
+.rfid-card:hover{background:var(--color-background-secondary)}
+.rfid-card.scanning{background:var(--color-background-info);border-color:var(--color-border-info)}
+.uid{font-family:var(--font-mono);font-size:10px;color:var(--color-text-secondary)}
+@keyframes door-open{from{transform:scaleX(1)}to{transform:scaleX(0.08)}}
+@keyframes door-close{from{transform:scaleX(0.08)}to{transform:scaleX(1)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes slide-motor{0%{transform:translateX(0)}100%{transform:translateX(var(--tx,0px))}}
+.motor-anim{transition:transform .1s linear}
+</style>
+
+<div class="sim">
+
+<div class="scene">
+  <canvas id="sceneCanvas" width="420" height="460" style="width:100%;height:460px"></canvas>
+</div>
+
+<div class="panel">
+  <div class="card">
+    <div class="card-title">LCD Display</div>
+    <div class="lcd"><span id="lcd0">System: INACTV</span><span id="lcd1">Scan RFID Card</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">System status</div>
+    <div class="status-row"><span class="stat-label">System</span><span class="pill off" id="st-system"><span class="dot"></span>Inactive</span></div>
+    <div class="status-row"><span class="stat-label">Solenoid lock</span><span class="pill off" id="st-lock"><span class="dot"></span>Locked</span></div>
+    <div class="status-row"><span class="stat-label">Door</span><span class="pill off" id="st-door"><span class="dot"></span>Closed</span></div>
+    <div class="status-row"><span class="stat-label">PIR motion</span><span class="pill off" id="st-pir"><span class="dot"></span>No motion</span></div>
+    <div class="status-row"><span class="stat-label">Push button</span><span class="pill off" id="st-btn"><span class="dot"></span>Released</span></div>
+    <div class="status-row"><span class="stat-label">Motor PWM</span><span class="pill off" id="st-motor"><span class="dot"></span>Stopped</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">RFID cards — click to scan</div>
+    <div class="rfid-cards" id="cardList"></div>
+    <div style="margin-top:6px">
+      <div class="rfid-card" id="unauthorised-card" onclick="scanCard('UNAUTH')">
+        <span style="font-size:12px">Unknown card</span>
+        <span class="uid">FF:FF:FF:FF</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Inputs</div>
+    <div class="btn-row">
+      <button id="pir-btn" onclick="togglePIR()"><i class="ti ti-activity" aria-hidden="true"></i> PIR trigger</button>
+      <button id="push-btn" onmousedown="pressBtn(true)" onmouseup="pressBtn(false)" onmouseleave="pressBtn(false)"><i class="ti ti-hand-finger" aria-hidden="true"></i> Push button</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Serial monitor</div>
+    <div class="log" id="logBox"></div>
+  </div>
+</div>
+</div>
+
+<script>
+const cards = [
+  {name:'Card 1',uid:'44:34:DD:00',bytes:[0x44,0x34,0xDD,0x00]},
+  {name:'Card 2',uid:'EF:76:26:1E',bytes:[0xEF,0x76,0x26,0x1E]},
+  {name:'Card 3',uid:'68:00:0A:78',bytes:[0x68,0x00,0x0A,0x78]},
+  {name:'Card 4',uid:'D5:0B:AA:72',bytes:[0xD5,0x0B,0xAA,0x72]},
+  {name:'Card 5',uid:'E8:29:85:77',bytes:[0xE8,0x29,0x85,0x77]},
+  {name:'Card 6',uid:'B3:50:F6:13',bytes:[0xB3,0x50,0xF6,0x13]},
+];
+
+let state = {
+  systemActive: false,
+  doorOpen: false,
+  doorPct: 0,
+  lockEngaged: false,
+  pirActive: false,
+  btnActive: false,
+  motorDir: 0,
+  scanning: false,
+  motorPwm: 0,
+};
+
+let pirTimer = null;
+let doorAnim = null;
+
+const cardList = document.getElementById('cardList');
+cards.forEach((c,i)=>{
+  const el = document.createElement('div');
+  el.className='rfid-card';
+  el.id='card-'+i;
+  el.innerHTML=`<span style="font-size:12px">${c.name}</span><span class="uid">${c.uid}</span>`;
+  el.onclick=()=>scanCard(i);
+  cardList.appendChild(el);
+});
+
+function log(msg,type=''){
+  const box=document.getElementById('logBox');
+  const t=new Date();
+  const ts=`[${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}]`;
+  const d=document.createElement('div');
+  d.className='log-entry '+(type||'');
+  d.textContent=ts+' '+msg;
+  box.appendChild(d);
+  box.scrollTop=box.scrollHeight;
+}
+
+function setLCD(row0,row1){
+  document.getElementById('lcd0').textContent=row0.padEnd(16).substring(0,16);
+  if(row1!==undefined) document.getElementById('lcd1').textContent=row1.padEnd(16).substring(0,16);
+}
+
+function setPill(id,text,cls){
+  const el=document.getElementById(id);
+  el.className='pill '+cls;
+  el.innerHTML=`<span class="dot"></span>${text}`;
+}
+
+function updateStatus(){
+  setPill('st-system', state.systemActive?'Active':'Inactive', state.systemActive?'on':'off');
+  setPill('st-lock', state.lockEngaged?'Unlocked':'Locked', state.lockEngaged?'warn':'off');
+  setPill('st-door', state.doorOpen?'Open':state.doorPct>0?'Moving':'Closed', state.doorOpen?'on':state.doorPct>0?'warn':'off');
+  setPill('st-pir', state.pirActive?'Motion!':'No motion', state.pirActive?'warn':'off');
+  setPill('st-btn', state.btnActive?'Pressed':'Released', state.btnActive?'warn':'off');
+  setPill('st-motor', state.motorDir===1?'Opening':state.motorDir===-1?'Closing':state.motorDir===0&&state.motorPwm>0?'PWM on':'Stopped', state.motorDir!==0?'on':'off');
+}
+
+function scanCard(idx){
+  if(state.scanning) return;
+  state.scanning=true;
+  const isAuth = idx !== 'UNAUTH';
+  const cardEl = isAuth ? document.getElementById('card-'+idx) : document.getElementById('unauthorised-card');
+  if(cardEl) cardEl.classList.add('scanning');
+  const uid = isAuth ? cards[idx].uid : 'FF:FF:FF:FF';
+  log('RFID scan: UID '+uid,'info');
+  setTimeout(()=>{
+    if(cardEl) cardEl.classList.remove('scanning');
+    state.scanning=false;
+    if(!isAuth){
+      log('Access denied — unknown card','err');
+      setLCD('Access Denied! ',' Scan RFID Card');
+      setTimeout(()=>refreshMainLCD(),2000);
+      return;
+    }
+    state.systemActive=!state.systemActive;
+    if(state.systemActive){
+      state.lockEngaged=true;
+      log('System ACTIVATED','ok');
+      log('[LOCK] Engaged','ok');
+      setLCD('System Activated','   Welcome!    ');
+      setTimeout(()=>refreshMainLCD(),3000);
+    } else {
+      state.lockEngaged=false;
+      stopDoorImmediate();
+      log('System DEACTIVATED','warn');
+      log('[LOCK] Released','warn');
+      setLCD('    System     ',' Deactivated   ');
+      setTimeout(()=>refreshMainLCD(),3000);
+    }
+    updateStatus();
+    drawScene();
+  },600);
+}
+
+function refreshMainLCD(){
+  setLCD(state.systemActive?'System: ACTIVE ':'System: INACTV','Scan RFID Card ');
+}
+
+function togglePIR(){
+  if(!state.systemActive) { log('PIR ignored — system inactive','warn'); return; }
+  state.pirActive=!state.pirActive;
+  const btn=document.getElementById('pir-btn');
+  btn.classList.toggle('active',state.pirActive);
+  log(state.pirActive?'[SENS] PIR triggered → opening':'[SENS] PIR cleared','info');
+  updateStatus();
+  evalInputs();
+  if(state.pirActive && pirTimer){ clearTimeout(pirTimer); pirTimer=null; }
+  if(state.pirActive){
+    pirTimer=setTimeout(()=>{
+      state.pirActive=false;
+      document.getElementById('pir-btn').classList.remove('active');
+      log('[SENS] PIR auto-clear','info');
+      updateStatus();
+      evalInputs();
+    },5000);
+  }
+}
+
+function pressBtn(down){
+  if(!state.systemActive && down) { log('Button ignored — system inactive','warn'); return; }
+  state.btnActive=down;
+  document.getElementById('push-btn').classList.toggle('active',down);
+  if(down) log('[SENS] Push button pressed → opening','info');
+  updateStatus();
+  evalInputs();
+}
+
+function evalInputs(){
+  if(!state.systemActive){ stopDoorImmediate(); return; }
+  if(!state.doorOpen && (state.pirActive||state.btnActive)){
+    startOpenDoor();
+  } else if(state.doorOpen && !state.pirActive && !state.btnActive){
+    startCloseDoor();
+  }
+}
+
+function startOpenDoor(){
+  if(state.motorDir===1) return;
+  state.motorDir=1;
+  log('[DOOR] Opening…','ok');
+  setLCD('  Door Opening ','               ');
+  animateDoor(1);
+}
+
+function startCloseDoor(){
+  if(state.motorDir===-1) return;
+  state.motorDir=-1;
+  log('[DOOR] Closing…','warn');
+  setLCD('  Door Closing ','               ');
+  animateDoor(-1);
+}
+
+function stopDoorImmediate(){
+  if(doorAnim){ clearInterval(doorAnim); doorAnim=null; }
+  state.motorDir=0;
+  state.pirActive=false;
+  state.btnActive=false;
+  state.doorOpen=false;
+  document.getElementById('pir-btn').classList.remove('active');
+  document.getElementById('push-btn').classList.remove('active');
+}
+
+function animateDoor(dir){
+  if(doorAnim){ clearInterval(doorAnim); doorAnim=null; }
+  doorAnim=setInterval(()=>{
+    if(!state.systemActive){ clearInterval(doorAnim); doorAnim=null; stopDoorImmediate(); updateStatus(); drawScene(); return; }
+    state.doorPct+=dir*2.5;
+    state.doorPct=Math.max(0,Math.min(100,state.doorPct));
+    const pwm = state.doorPct<60 ? 255 : 180;
+    state.motorPwm=pwm;
+    if(dir===1 && state.doorPct>=100){
+      clearInterval(doorAnim); doorAnim=null;
+      state.doorOpen=true; state.motorDir=0; state.motorPwm=0;
+      log('[DOOR] Open limit reached','ok');
+      setLCD('  Door  Open   ','               ');
+    }
+    if(dir===-1 && state.doorPct<=0){
+      clearInterval(doorAnim); doorAnim=null;
+      state.doorOpen=false; state.motorDir=0; state.motorPwm=0;
+      log('[DOOR] Close limit reached','ok');
+      refreshMainLCD();
+    }
+    updateStatus();
+    drawScene();
+  },40);
+}
+
+const canvas=document.getElementById('sceneCanvas');
+const ctx=canvas.getContext('2d');
+
+function getCSSVar(v){
+  return getComputedStyle(document.body).getPropertyValue(v).trim()||'#888';
+}
+
+function drawScene(){
+  const W=420,H=460;
+  ctx.clearRect(0,0,W,H);
+
+  const bg=getCSSVar('--color-background-secondary');
+  const border=getCSSVar('--color-border-tertiary');
+  const textPri=getCSSVar('--color-text-primary');
+  const textSec=getCSSVar('--color-text-secondary');
+
+  ctx.fillStyle=bg;
+  ctx.fillRect(0,0,W,H);
+
+  const wallL=40,wallR=300,wallTop=60,wallBot=360;
+  const doorW=140,doorH=200;
+  const doorX=wallL+60,doorY=wallTop;
+
+  ctx.strokeStyle=textSec;
+  ctx.lineWidth=1;
+
+  ctx.fillStyle=getCSSVar('--color-background-primary');
+  ctx.beginPath(); ctx.rect(wallL,wallTop,wallR-wallL,wallBot-wallTop);
+  ctx.fill(); ctx.stroke();
+
+  const wallColor='#b0a090';
+  ctx.fillStyle=wallColor;
+  ctx.fillRect(wallL,wallTop,60,wallBot-wallTop);
+  ctx.fillRect(doorX+doorW,wallTop,(wallR-wallL)-60-doorW,wallBot-wallTop);
+  ctx.fillRect(wallL,wallTop,wallR-wallL,40);
+
+  const openPct=state.doorPct/100;
+  const actualDoorW=Math.max(8,doorW*(1-openPct*0.92));
+
+  ctx.fillStyle='#c8b89a';
+  ctx.strokeStyle='#8a7060';
+  ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.rect(doorX,doorY,actualDoorW,doorH);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle='#8a7060';
+  ctx.beginPath(); ctx.arc(doorX+actualDoorW-10,doorY+doorH/2,4,0,Math.PI*2); ctx.fill();
+
+  if(state.lockEngaged){
+    ctx.fillStyle='#e67e22'; ctx.strokeStyle='#c0392b'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.rect(doorX+actualDoorW-6,doorY+doorH/2-10,10,18); ctx.fill(); ctx.stroke();
+  } else {
+    ctx.fillStyle='#27ae60'; ctx.strokeStyle='#1e8449'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.rect(doorX+actualDoorW-6,doorY+doorH/2-2,10,12); ctx.fill(); ctx.stroke();
+  }
+
+  ctx.font='11px monospace'; ctx.fillStyle=textSec; ctx.textAlign='center';
+  ctx.fillText(state.lockEngaged?'LOCKED':'UNLOCKED', doorX+doorW/2, doorY+doorH+18);
+
+  if(openPct>0.05){
+    const sw=Math.max(0,doorW-actualDoorW);
+    const openX=doorX+actualDoorW;
+    ctx.fillStyle='rgba(135,206,235,0.18)';
+    ctx.strokeStyle='rgba(135,206,235,0.6)';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.rect(openX,doorY,sw,doorH);
+    ctx.fill(); ctx.stroke();
+    ctx.font='10px monospace'; ctx.fillStyle='rgba(135,206,235,0.9)'; ctx.textAlign='center';
+    if(sw>30) ctx.fillText('OPEN',openX+sw/2,doorY+doorH/2);
+  }
+
+  const espX=320,espY=80,espW=88,espH=200;
+  ctx.fillStyle='#1a237e'; ctx.strokeStyle='#3949ab'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.roundRect(espX,espY,espW,espH,6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 10px monospace'; ctx.textAlign='center';
+  ctx.fillText('ESP32',espX+espW/2,espY+16);
+
+  const gpios=[
+    {label:'GPIO5 SS',y:30,active:false},
+    {label:'GPIO18 SCK',y:44,active:false},
+    {label:'GPIO23 MOSI',y:58,active:false},
+    {label:'GPIO19 MISO',y:72,active:false},
+    {label:'GPIO27 RST',y:86,active:false},
+    {label:'GPIO21 SDA',y:100,active:false},
+    {label:'GPIO22 SCL',y:114,active:false},
+    {label:'GPIO13 PIR',y:128,active:state.pirActive},
+    {label:'GPIO12 BTN',y:142,active:state.btnActive},
+    {label:'GPIO25 PWM',y:156,active:state.motorDir!==0},
+    {label:'GPIO4 RLY',y:170,active:state.lockEngaged},
+  ];
+  gpios.forEach(g=>{
+    ctx.fillStyle=g.active?'#27ae60':'#1565c0';
+    ctx.beginPath(); ctx.arc(espX+6,espY+g.y,3,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=g.active?'#a5d6a7':'#90caf9'; ctx.font='7.5px monospace'; ctx.textAlign='left';
+    ctx.fillText(g.label,espX+12,espY+g.y+3);
+  });
+
+  const rfidX=50,rfidY=390,rfidW=90,rfidH=52;
+  ctx.fillStyle='#212121'; ctx.strokeStyle='#424242'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.roundRect(rfidX,rfidY,rfidW,rfidH,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#bdbdbd'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText('MFRC522',rfidX+rfidW/2,rfidY+16);
+  ctx.fillStyle='#78909c'; ctx.font='8px monospace';
+  ctx.fillText('RFID Reader',rfidX+rfidW/2,rfidY+28);
+  ctx.fillStyle='#64b5f6';
+  ctx.fillText('SPI Interface',rfidX+rfidW/2,rfidY+42);
+
+  const btsX=155,btsY=390,btsW=80,btsH=52;
+  const btsActive=state.motorDir!==0;
+  ctx.fillStyle=btsActive?'#1b5e20':'#212121'; ctx.strokeStyle=btsActive?'#388e3c':'#424242'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.roundRect(btsX,btsY,btsW,btsH,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=btsActive?'#a5d6a7':'#bdbdbd'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText('BTS7960',btsX+btsW/2,btsY+16);
+  ctx.fillStyle=btsActive?'#69f0ae':'#78909c'; ctx.font='8px monospace';
+  ctx.fillText(btsActive?'RUNNING':'STANDBY',btsX+btsW/2,btsY+28);
+  if(btsActive){
+    const dir=state.motorDir===1?'→ OPEN':'← CLOSE';
+    ctx.fillStyle='#69f0ae'; ctx.fillText(dir,btsX+btsW/2,btsY+42);
+  }
+
+  const pirX=255,pirY=390,pirW=64,pirH=52;
+  ctx.fillStyle=state.pirActive?'#4a1700':'#212121'; ctx.strokeStyle=state.pirActive?'#ff6d00':'#424242'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.roundRect(pirX,pirY,pirW,pirH,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=state.pirActive?'#ffcc80':'#bdbdbd'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText('PIR',pirX+pirW/2,pirY+16);
+  ctx.fillStyle=state.pirActive?'#ff6d00':'#78909c'; ctx.font='8px monospace';
+  ctx.fillText(state.pirActive?'MOTION!':'Quiet',pirX+pirW/2,pirY+30);
+
+  const solX=340,solY=390,solW=72,solH=52;
+  const solActive=state.lockEngaged;
+  ctx.fillStyle=solActive?'#f57f17':'#212121'; ctx.strokeStyle=solActive?'#f9a825':'#424242'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.roundRect(solX,solY,solW,solH,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=solActive?'#1a1a1a':'#bdbdbd'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText('Solenoid',solX+solW/2,solY+16);
+  ctx.fillStyle=solActive?'#1a1a1a':'#78909c'; ctx.font='8px monospace';
+  ctx.fillText(solActive?'ENGAGED':'RELEASED',solX+solW/2,solY+30);
+
+  ctx.font='500 10px var(--font-sans)'; ctx.fillStyle=textPri; ctx.textAlign='left';
+  ctx.fillText('Door assembly',wallL+2,wallTop-8);
+  ctx.font='500 10px var(--font-sans)'; ctx.fillStyle=textSec;
+  ctx.fillText('Components',rfidX,rfidY-8);
+
+  const pct=Math.round(state.doorPct);
+  if(state.motorDir!==0){
+    ctx.fillStyle=state.motorDir===1?'#27ae60':'#e67e22';
+    ctx.font='bold 11px monospace'; ctx.textAlign='center';
+    ctx.fillText((state.motorDir===1?'Opening ':'Closing ')+pct+'%', wallL+(wallR-wallL)/2, wallBot+32);
+    const barW=200,barX=wallL+(wallR-wallL)/2-100,barY=wallBot+40;
+    ctx.fillStyle='#444'; ctx.beginPath(); ctx.roundRect(barX,barY,barW,6,3); ctx.fill();
+    ctx.fillStyle=state.motorDir===1?'#27ae60':'#e67e22';
+    ctx.beginPath(); ctx.roundRect(barX,barY,barW*pct/100,6,3); ctx.fill();
+  }
+
+  if(!state.systemActive && state.doorPct===0){
+    ctx.font='11px var(--font-sans)'; ctx.fillStyle=textSec; ctx.textAlign='center';
+    ctx.fillText('Scan an authorised RFID card to activate system',W/2,wallBot+38);
+  }
+}
+
+log('[BOOT] System ready','ok');
+log('[BOOT] EEPROM: state=INACTIVE','info');
+log('[OTA]  Wi-Fi connecting…','info');
+setTimeout(()=>log('[OTA]  Connected — OTA ready','ok'),1200);
+log('Scan RFID to activate','info');
+drawScene();
+</script>
